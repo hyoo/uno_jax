@@ -25,6 +25,8 @@ def load(file_prefix, batch_size, cell_input_size=942, drug_input_size=5270):
 
         if partition == 'train':
             ds = ds.repeat()
+        elif partition == 'val':
+            ds = ds.cache()
 
         ds = ds.batch(
             batch_size=batch_size,
