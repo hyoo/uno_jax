@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import optax
 import numpy as np
+from typing import Iterable, Callable
 from data import load
 from timeit import default_timer as timer
 from clu import parameter_overview
@@ -22,15 +23,15 @@ def parse_arguments():
 
 
 class GeneFeatureModel(nn.Module):
-    input_size = 942
-    name = 'gene'
-    dense_layers = [1000, 1000, 1000]
-    dropout_rate = 0.1
+    input_size: int
+    dense_layers: Iterable
+    dropout_rate: float
+    kernel_init: Callable = jax.nn.initializers.glorot_normal()
 
     @nn.compact
     def __call__(self, z):
         for i, n in enumerate(self.dense_layers):
-            z = nn.Dense(n, kernel_init=jax.nn.initializers.glorot_normal(), name=f'dense_{i}')(z)
+            z = nn.Dense(n, kernel_init=self.kernel_init, name=f'dense_{i}')(z)
             z = nn.relu(z)
             if self.dropout_rate > 0.:
                 z = nn.Dropout(rate=self.dropout_rate, deterministic=False)(z)
@@ -38,15 +39,15 @@ class GeneFeatureModel(nn.Module):
 
 
 class DrugFeatureModel(nn.Module):
-    input_size = 5270
-    name = 'drug'
-    dense_layers = [1000, 1000, 1000]
-    dropout_rate = 0.1
+    input_size: int
+    dense_layers: Iterable
+    dropout_rate: float
+    kernel_init: Callable = jax.nn.initializers.glorot_normal()
 
     @nn.compact
     def __call__(self, z):
         for i, n in enumerate(self.dense_layers):
-            z = nn.Dense(n, kernel_init=jax.nn.initializers.glorot_normal(), name=f'dense_{i}')(z)
+            z = nn.Dense(n, kernel_init=self.kernel_init, name=f'dense_{i}')(z)
             z = nn.relu(z)
             if self.dropout_rate > 0.:
                 z = nn.Dropout(self.dropout_rate, deterministic=False)(z)
@@ -55,13 +56,27 @@ class DrugFeatureModel(nn.Module):
 
 class UnoModel(nn.Module):
     """ Uno Model """
-    dense_layers = [1000, 1000, 1000, 1000, 1000]
-    concat_dim = 2000
-    dropout_rate = 0.1
+    gene_input_size: int = 942
+    gene_dense_layers: Iterable = (1000, 1000, 1000)
+    drug_input_size: int = 5270
+    drug_dense_layers: Iterable = (1000, 1000, 1000)
+    dense_layers: Iterable = (1000, 1000, 1000, 1000, 1000)
+    dropout_rate: float = 0.1
+    kernel_init: Callable = jax.nn.initializers.glorot_normal()
 
     def setup(self):
-        self.gene_net = GeneFeatureModel()
-        self.drug_net = DrugFeatureModel()
+        self.gene_net = GeneFeatureModel(
+                input_size=self.gene_input_size,
+                dense_layers=self.gene_dense_layers,
+                dropout_rate=self.dropout_rate,
+                kernel_init=self.kernel_init,
+        )
+        self.drug_net = DrugFeatureModel(
+                input_size=self.drug_input_size,
+                dense_layers=self.drug_dense_layers,
+                dropout_rate=self.dropout_rate,
+                kernel_init=self.kernel_init,
+        )
 
     @nn.compact
     def __call__(self, inputs):
@@ -71,7 +86,7 @@ class UnoModel(nn.Module):
         x = jax.lax.concatenate([gene, drug], dimension=1)
 
         for i, n in enumerate(self.dense_layers):
-            x = nn.Dense(n, kernel_init=jax.nn.initializers.glorot_normal(), name=f'dense_{i}')(x)
+            x = nn.Dense(n, kernel_init=self.kernel_init, name=f'dense_{i}')(x)
             x = nn.relu(x)
             if self.dropout_rate > 0.:
                 x = nn.Dropout(self.dropout_rate, deterministic=False)(x)
